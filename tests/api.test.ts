@@ -112,6 +112,23 @@ describe('GET /api/state', () => {
 
     expect(resolution.resolveGuess).not.toHaveBeenCalled()
   })
+
+  it('returns a helpful error when the player table is missing', async () => {
+    const error = new Error('Requested resource not found')
+    error.name = 'ResourceNotFoundException'
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(db.getOrCreatePlayer).mockRejectedValue(error)
+    vi.mocked(price.fetchBtcPrice).mockResolvedValue({ price: 65000, source: 'binance' })
+
+    const res = await stateGET(makeRequest('GET', { 'x-player-id': PLAYER_ID }))
+    const body = await res.json()
+
+    expect(res.status).toBe(500)
+    expect(body.error).toBe(
+      `DynamoDB table "${process.env.TABLE_NAME ?? 'btc-game'}" was not found in region "${process.env.AWS_REGION ?? 'us-east-1'}".`
+    )
+    consoleSpy.mockRestore()
+  })
 })
 
 // ─────────────────────────────────────────────────────────
@@ -173,5 +190,23 @@ describe('POST /api/guess', () => {
       makeRequest('POST', { 'x-player-id': PLAYER_ID }, { direction: 'up' })
     )
     expect(res.status).toBe(503)
+  })
+
+  it('returns a helpful infra error when the player table is missing', async () => {
+    const error = new Error('Requested resource not found')
+    error.name = 'ResourceNotFoundException'
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(db.getOrCreatePlayer).mockRejectedValue(error)
+
+    const res = await guessPost(
+      makeRequest('POST', { 'x-player-id': PLAYER_ID }, { direction: 'up' })
+    )
+    const body = await res.json()
+
+    expect(res.status).toBe(500)
+    expect(body.error).toBe(
+      `DynamoDB table "${process.env.TABLE_NAME ?? 'btc-game'}" was not found in region "${process.env.AWS_REGION ?? 'us-east-1'}".`
+    )
+    consoleSpy.mockRestore()
   })
 })

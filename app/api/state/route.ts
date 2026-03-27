@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v4 as uuidv4 } from 'uuid'
 import { getOrCreatePlayer, resolveAndUpdateScore } from '@/lib/db'
+import { getAwsInfraErrorMessage, logAwsInfraError } from '@/lib/aws-errors'
 import { fetchBtcPrice } from '@/lib/price'
 import { resolveGuess } from '@/lib/resolution'
 import type { GameState } from '@/lib/types'
@@ -17,8 +18,9 @@ export async function GET(request: NextRequest) {
   ])
 
   if (playerResult.status === 'rejected') {
+    logAwsInfraError('GET /api/state player bootstrap failed', playerResult.reason)
     return NextResponse.json(
-      { error: 'Failed to load player data' },
+      { error: getAwsInfraErrorMessage(playerResult.reason) },
       { status: 500 }
     )
   }

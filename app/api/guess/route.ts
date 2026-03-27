@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getOrCreatePlayer, submitGuess } from '@/lib/db'
+import { getAwsInfraErrorMessage, logAwsInfraError } from '@/lib/aws-errors'
 import { fetchBtcPrice } from '@/lib/price'
 import type { Direction } from '@/lib/types'
 
@@ -30,7 +31,17 @@ export async function POST(request: NextRequest) {
   }
 
   // Check for an existing pending guess
-  const player = await getOrCreatePlayer(playerId)
+  let player
+  try {
+    player = await getOrCreatePlayer(playerId)
+  } catch (error) {
+    logAwsInfraError('POST /api/guess player bootstrap failed', error)
+    return NextResponse.json(
+      { error: getAwsInfraErrorMessage(error) },
+      { status: 500 }
+    )
+  }
+
   if (player.activeGuess) {
     return NextResponse.json(
       { error: 'A guess is already pending', activeGuess: player.activeGuess },
@@ -65,7 +76,11 @@ export async function POST(request: NextRequest) {
         { status: 409 }
       )
     }
-    return NextResponse.json({ error: 'Failed to submit guess' }, { status: 500 })
+    logAwsInfraError('POST /api/guess submit failed', err)
+    return NextResponse.json(
+      { error: getAwsInfraErrorMessage(err) },
+      { status: 500 }
+    )
   }
 
   return NextResponse.json({ guess }, { status: 201 })

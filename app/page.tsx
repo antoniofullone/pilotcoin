@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import type { GameState, Direction } from '@/lib/types'
 
 const POLL_INTERVAL_MS = 5000
+type ErrorResponse = { error?: string }
 
 function getOrCreatePlayerId(): string {
   if (typeof window === 'undefined') return ''
@@ -59,7 +60,10 @@ export default function Home() {
       const res = await fetch('/api/state', {
         headers: { 'x-player-id': playerId },
       })
-      if (!res.ok) throw new Error(`State fetch failed: ${res.status}`)
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as ErrorResponse | null
+        throw new Error(body?.error ?? `State fetch failed: ${res.status}`)
+      }
       const data = await res.json()
 
       // Persist server-echoed player ID (for new players without a stored ID)
@@ -76,8 +80,15 @@ export default function Home() {
 
       setState(data)
       setError(null)
-    } catch {
-      setError('Connection error — retrying…')
+    } catch (error) {
+      if (error instanceof TypeError) {
+        setError('Connection error — retrying…')
+        return
+      }
+
+      setError(
+        error instanceof Error ? error.message : 'Connection error — retrying…'
+      )
     }
   }, [])
 
