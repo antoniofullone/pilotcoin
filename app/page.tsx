@@ -265,6 +265,8 @@ export default function Home() {
         return
       }
       await fetchState()
+    } catch {
+      setError('Connection lost — please try again.')
     } finally {
       setSubmitting(false)
       setTimeout(() => setLockedIn(null), 500)

@@ -1,86 +1,83 @@
 # Engineering Trade-offs
 
-This document tracks deliberate trade-offs made during the design and implementation of this project. For each trade-off, I've noted what was gained, what was lost, and what the production upgrade path looks like.
+Deliberate trade-offs made during design and implementation. For each: what I chose, what I gave up, and how to fix it.
 
 ---
 
 ## 1. Lazy resolution vs. background job
 
-**What I chose:** Guess resolution happens inline on the next `/api/state` poll after eligibility is met.
+**Chose:** Guess resolution happens inline on the next `/api/state` poll.
 
-**What I gave up:** Guesses resolve while the user is offline. If a player submits a guess and closes their browser, the guess won't be evaluated until they return.
+**Gave up:** Resolution while the user is offline. Close your browser mid-guess and it won't evaluate until you come back.
 
-**Why I'm comfortable with this:** The spec says "players should be able to close their browser and return back to see their score and continue to make more guesses." This is about persistence (score survives a closed browser), not about background settlement. The spec never says "the guess settles while you're away."
+**Why I'm fine with this:** The spec says "players should be able to close their browser and return back to see their score." That's about persistence, not background settlement. Nothing in the spec says "the guess settles while you're away."
 
-**Production upgrade path:** Add a cron job (Vercel Cron or AWS EventBridge) that runs every 60 seconds, scans for eligible pending guesses across all players, and resolves them. At that point, you'd also want a GSI on the players table to avoid a full scan.
-
----
-
-## 2. Embedded active guess vs. separate guess records
-
-**What I chose:** One DynamoDB item per player with `activeGuess` as an embedded attribute.
-
-**What I gave up:** Guess history. There's no record of past guesses — only the current active one (if any).
-
-**Why I'm comfortable with this:** The spec asks for score persistence and one-guess-at-a-time enforcement. It doesn't mention displaying past guesses or auditing resolution history. Building guess history storage adds a table, a query pattern, and consistency complexity that buys nothing the spec asks for.
-
-**Production upgrade path:** Change `activeGuess` to a list attribute `guessHistory` (or a separate table with `playerId` as PK and `guessedAt` as SK). The resolution logic stays identical — you just append to history instead of overwriting.
+**To upgrade:** Add a cron job (Vercel Cron or EventBridge) that scans for eligible pending guesses every 60 seconds. You'd want a GSI on the player table to avoid a full scan.
 
 ---
 
-## 3. Single UpdateItem vs. TransactWriteItems for resolution
+## 2. Embedded active guess vs. separate records
 
-**What I chose:** Single `UpdateItem` with a condition expression for atomic resolution.
+**Chose:** One DynamoDB item per player with `activeGuess` as an attribute.
 
-**What I gave up:** Multi-item transactional guarantees. (But there's nothing to give up here — it's one item.)
+**Gave up:** Guess history. No record of past guesses, only the active one.
 
-**Why this is correct:** When both score and active guess state live on the same DynamoDB item, resolving a guess is a single atomic operation by definition. `UpdateItem` is fully atomic on a single item. `TransactWriteItems` is needed when you're coordinating writes across multiple items or tables — which is exactly the architecture I moved away from.
+**Why I'm fine with this:** The spec asks for score persistence and one-guess-at-a-time. It doesn't mention past guesses. Adding a history table means more schema, more queries, and more consistency logic for something nobody asked for.
 
-The condition expression (`ConditionExpression: attribute_not_exists(activeGuess) = false`) prevents double-resolution if two requests race to resolve the same guess. First writer wins; second writer gets a `ConditionalCheckFailedException` which is silently handled.
+**To upgrade:** Add a `guessHistory` list attribute, or a dedicated table with `playerId` as PK and `guessedAt` as SK. Resolution logic stays the same — just append instead of overwrite.
+
+---
+
+## 3. Single UpdateItem vs. TransactWriteItems
+
+**Chose:** One `UpdateItem` with a condition expression for atomic resolution.
+
+**Gave up:** Nothing. When score and active guess live on the same item, `UpdateItem` is already fully atomic. `TransactWriteItems` is for coordinating across items or tables, which is exactly the architecture I avoided.
+
+The condition expression prevents double-resolution: first writer wins, second gets `ConditionalCheckFailedException`, handled gracefully.
 
 ---
 
 ## 4. UUID in localStorage vs. server-issued session
 
-**What I chose:** Client-generated UUID stored in `localStorage`.
+**Chose:** Client-generated UUID in `localStorage`.
 
-**What I gave up:** Tamper resistance. Anyone who knows a player's UUID can impersonate them by sending that UUID as the `X-Player-Id` header.
+**Gave up:** Tamper resistance. If someone knows your UUID, they can send it as the `X-Player-Id` header and impersonate you.
 
-**Why I'm comfortable with this:** For a proof-of-concept game with no real money or stakes, session hijacking is a low-severity risk. The UUID is randomly generated (v4), so it's not guessable. The attack surface is "someone who already has your UUID" — a social engineering problem, not a technical one.
+**Why I'm fine with this:** No real money, no real stakes. The UUID is v4 (random), so not guessable. The attack requires already having the UUID.
 
-**Production upgrade path:** Issue the UUID server-side on first visit. Return it as an `httpOnly`, `Secure`, `SameSite=Strict` cookie. The browser sends it automatically. JavaScript can't read it (closes XSS vector). Remove the `X-Player-Id` header pattern entirely.
+**To upgrade:** Issue the UUID server-side on first visit. Return it as an `httpOnly`, `Secure`, `SameSite=Strict` cookie. JavaScript can't read it (closes XSS vector), the browser sends it automatically. Drop the header pattern entirely.
 
 ---
 
 ## 5. 5-second polling vs. real-time push
 
-**What I chose:** Client polls `/api/state` every 5 seconds.
+**Chose:** Client polls `/api/state` every 5 seconds.
 
-**What I gave up:** Real-time price updates and instant resolution notification. There's up to a 5-second lag between when a guess resolves and when the player sees it.
+**Gave up:** Real-time price updates and instant resolution notification. Up to 5 seconds of lag.
 
-**Why I'm comfortable with this:** For a "guess over 1 minute" game, 5-second polling latency is imperceptible to the user experience. The gameplay loop is: submit guess, wait, see result. A 5-second resolution delay on a 60-second game is a 8% timing imprecision — acceptable.
+**Why I'm fine with this:** For a "guess over 1 minute" game, 5-second polling is imperceptible. The gameplay is: submit, wait 60 seconds, see result. A 5-second lag on a 60-second game is ~8% timing imprecision.
 
-**Production upgrade path:** Server-Sent Events (SSE) for the price feed (Vercel supports streaming responses). WebSocket for resolution notifications (would need a persistent connection service like AWS API Gateway WebSocket or a dedicated WS server, since Vercel doesn't support persistent connections natively).
+**To upgrade:** Server-Sent Events for the price feed (Vercel supports streaming). WebSocket for resolution notifications (needs a persistent connection service since Vercel doesn't support native WebSockets).
 
 ---
 
 ## 6. Binance + Kraken vs. dedicated market data provider
 
-**What I chose:** Direct calls to exchange public REST APIs.
+**Chose:** Direct calls to exchange public REST APIs.
 
-**What I gave up:** Price normalization, guaranteed uptime SLAs, a single failure point to monitor.
+**Gave up:** Normalized data, uptime SLAs, and a single point to monitor.
 
-**Why I'm comfortable with this:** Both Binance and Kraken are tier-1 exchanges with 99.9%+ uptime on their public API endpoints. For this use case, the raw exchange price is actually more accurate than an aggregated price — there's no aggregation lag. No API key required, no rate limit concerns at this scale.
+**Why I'm fine with this:** Both are tier-1 exchanges with 99.9%+ uptime. No API key needed. Raw exchange data is actually more accurate than aggregated prices here — no aggregation lag.
 
-**Production upgrade path:** Use a dedicated market data provider (CoinAPI, Kaiko, or similar) for guaranteed SLAs, normalized data, and WebSocket price streams. Alternatively, build a price caching layer that buffers exchange data and serves it from Redis with sub-millisecond latency.
+**To upgrade:** A dedicated provider (CoinAPI, Kaiko) for SLAs and WebSocket streams. Or a price caching layer with Redis.
 
 ---
 
-## Explicit non-decisions (things I didn't even start)
+## Things I didn't build (and why)
 
-- **Guess history UI** — Not in spec. If asked in walkthrough: "I'd add a `guessHistory` attribute to the player item and render it below the game. The data model supports it without migration."
-- **Leaderboard** — Not in spec. Would require a GSI on `score` (or a secondary table). Explicitly out of scope.
-- **Rate limiting** — Not implemented. Would add `proxy.ts` with IP-based rate limiting on `POST /api/guess` in production.
-- **IaC templates** — No SAM or CDK. The DynamoDB table setup is documented in the README with console instructions. In a team context, I'd add a SAM template.
-- **End-to-end tests** — Skipped for time. Would use Playwright. The README documents this as the next testing investment.
-
+- **Guess history UI** — Not in spec. Easy to add as a `guessHistory` attribute.
+- **Leaderboard** — Not in spec. Needs a GSI on `score` or a secondary table.
+- **Rate limiting** — Would add `proxy.ts` with IP-based throttling on `POST /api/guess`.
+- **IaC templates** — DynamoDB setup is in the README. In a team, I'd add SAM or CDK.
+- **E2E tests** — Would use Playwright. Documented as the next testing investment.

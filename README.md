@@ -2,7 +2,7 @@
 
 A web app that lets players guess whether the Bitcoin (BTC/USD) price will be higher or lower after one minute. Correct guesses add a point. Incorrect guesses subtract one. Score persists across sessions.
 
-**Live demo:** _(add Vercel URL after deployment)_
+**[Try the live demo](https://pilotcoin.vercel.app)**
 
 ---
 
@@ -70,7 +70,7 @@ Create a `.env.local` file:
 ```env
 AWS_ACCESS_KEY_ID=your_access_key
 AWS_SECRET_ACCESS_KEY=your_secret_key
-AWS_REGION=us-east-1
+AWS_REGION=us-east-1          # or whichever region your table lives in
 TABLE_NAME=btc-game
 ```
 
@@ -82,7 +82,7 @@ aws dynamodb create-table \
   --attribute-definitions AttributeName=playerId,AttributeType=S \
   --key-schema AttributeName=playerId,KeyType=HASH \
   --billing-mode PAY_PER_REQUEST \
-  --region us-east-1
+  --region $AWS_REGION
 ```
 
 Or create it in the AWS Console: DynamoDB → Create table → Partition key: `playerId` (String) → On-demand capacity.
@@ -103,7 +103,7 @@ Open [http://localhost:3000](http://localhost:3000).
 npm test
 ```
 
-26 tests across 3 suites:
+30 tests across 3 suites:
 
 | Suite | What it tests |
 |---|---|
@@ -124,11 +124,11 @@ Set these environment variables in the Vercel project settings:
 ```
 AWS_ACCESS_KEY_ID=<your key>
 AWS_SECRET_ACCESS_KEY=<your secret>
-AWS_REGION=us-east-1
+AWS_REGION=<your DynamoDB region>
 TABLE_NAME=btc-game
 ```
 
-Vercel deploys on every push to `main`. The app runs in the `us-east-1` region by default, minimising latency to DynamoDB.
+Vercel deploys on every push to `main`.
 
 ### 2. Create the DynamoDB Table
 

@@ -91,6 +91,7 @@ describe('GET /api/state', () => {
       outcome: 'correct',
       pointsDelta: 1,
       priceAtResolution: 66000,
+      guessedAt: new Date(Date.now() - 70_000).toISOString(),
     })
     vi.mocked(db.resolveAndUpdateScore).mockResolvedValue(undefined)
 
@@ -102,6 +103,22 @@ describe('GET /api/state', () => {
     expect(body.activeGuess).toBeNull()
     expect(body.lastResolution?.outcome).toBe('correct')
     expect(db.resolveAndUpdateScore).toHaveBeenCalledWith(PLAYER_ID, 1)
+  })
+
+  it('uses the same price source as the active guess for fairness', async () => {
+    const activeGuess = {
+      direction: 'up' as const,
+      priceAtGuess: 65000,
+      guessedAt: new Date(Date.now() - 70_000).toISOString(),
+      priceSource: 'kraken' as const,
+    }
+    vi.mocked(db.getOrCreatePlayer).mockResolvedValue(makePlayer({ score: 2, activeGuess }))
+    vi.mocked(price.fetchBtcPrice).mockResolvedValue({ price: 66000, source: 'kraken' })
+    vi.mocked(resolution.resolveGuess).mockReturnValue(null)
+
+    await stateGET(makeRequest('GET', { 'x-player-id': PLAYER_ID }))
+
+    expect(price.fetchBtcPrice).toHaveBeenCalledWith('kraken')
   })
 
   it('does not attempt resolution when no active guess', async () => {

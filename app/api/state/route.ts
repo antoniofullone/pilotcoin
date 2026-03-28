@@ -11,11 +11,11 @@ export const dynamic = 'force-dynamic'
 export async function GET(request: NextRequest) {
   const playerId = request.headers.get('x-player-id') || uuidv4()
 
-  // Fetch player state and price in parallel — price failure is non-fatal
-  const [playerResult, priceResult] = await Promise.allSettled([
-    getOrCreatePlayer(playerId),
-    fetchBtcPrice(),
-  ])
+  // Fetch player first — we need priceSource from activeGuess to enforce same-source resolution
+  const playerResult = await getOrCreatePlayer(playerId).then(
+    (value) => ({ status: 'fulfilled' as const, value }),
+    (reason) => ({ status: 'rejected' as const, reason })
+  )
 
   if (playerResult.status === 'rejected') {
     logAwsInfraError('GET /api/state player bootstrap failed', playerResult.reason)
@@ -26,8 +26,10 @@ export async function GET(request: NextRequest) {
   }
 
   const player = playerResult.value
-  const priceFetch =
-    priceResult.status === 'fulfilled' ? priceResult.value : null
+
+  // Use the same price source that was used at guess time to enforce fairness
+  const preferredSource = player.activeGuess?.priceSource
+  const priceFetch = await fetchBtcPrice(preferredSource).catch(() => null)
 
   let lastResolution = null
 
@@ -45,9 +47,12 @@ export async function GET(request: NextRequest) {
         // Reflect the updated score locally (avoid a second DB read)
         player.score += resolution.pointsDelta
         player.activeGuess = null
-      } catch {
-        // ConditionalCheckFailedException means another request already resolved it
-        // Silently ignore — the next poll will return the resolved state
+      } catch (err) {
+        if (err instanceof Error && err.name === 'ConditionalCheckFailedException') {
+          // Another request already resolved this guess — next poll will converge
+        } else {
+          logAwsInfraError('GET /api/state settlement failed', err)
+        }
       }
     }
   }
