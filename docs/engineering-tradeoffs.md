@@ -83,3 +83,4 @@ The condition expression (`ConditionExpression: attribute_not_exists(activeGuess
 - **Rate limiting** — Not implemented. Would add `proxy.ts` with IP-based rate limiting on `POST /api/guess` in production.
 - **IaC templates** — No SAM or CDK. The DynamoDB table setup is documented in the README with console instructions. In a team context, I'd add a SAM template.
 - **End-to-end tests** — Skipped for time. Would use Playwright. The README documents this as the next testing investment.
+

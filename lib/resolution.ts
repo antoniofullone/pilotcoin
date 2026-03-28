@@ -21,7 +21,6 @@ const RESOLUTION_DELAY_MS = 60_000
 export function resolveGuess(
   guess: ActiveGuess,
   currentPrice: number,
-  priceAtResolution: number,
   now: Date = new Date()
 ): ResolutionResult | null {
   const elapsed = now.getTime() - new Date(guess.guessedAt).getTime()
@@ -38,6 +37,7 @@ export function resolveGuess(
   return {
     outcome: correct ? 'correct' : 'incorrect',
     pointsDelta: correct ? 1 : -1,
-    priceAtResolution,
+    priceAtResolution: currentPrice,
+    guessedAt: guess.guessedAt,
   }
 }

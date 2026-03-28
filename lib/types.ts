@@ -20,6 +20,7 @@ export interface ResolutionResult {
   outcome: Outcome
   pointsDelta: 1 | -1
   priceAtResolution: number
+  guessedAt: string // ISO 8601 — used by client to deduplicate flash notifications
 }
 
 export interface PriceFetch {

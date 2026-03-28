@@ -16,7 +16,6 @@ type FlashState = {
 }
 
 function streakMessage(streak: number): string {
-  if (streak === 1) return 'Nice call!'
   if (streak === 2) return 'Two in a row!'
   if (streak === 3) return 'On fire! 🔥'
   if (streak === 4) return 'Four straight! 🔥'
@@ -149,8 +148,9 @@ export default function Home() {
   const [streak, setStreak] = useState(0)
   const playerIdRef = useRef<string>('')
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Track last seen resolution to avoid re-triggering on every poll
-  const lastResolutionPriceRef = useRef<number | null>(null)
+  const mountedRef = useRef(true)
+  // Track last seen resolution by guessedAt timestamp to avoid re-triggering on every poll
+  const lastResolutionGuessedAtRef = useRef<string | null>(null)
   // Capture priceAtGuess before activeGuess is cleared on resolution
   const lastActiveGuessPriceRef = useRef<number | null>(null)
 
@@ -168,6 +168,8 @@ export default function Home() {
       }
       const data = await res.json() as GameState
 
+      if (!mountedRef.current) return
+
       const echoedId = res.headers.get('x-player-id')
       if (echoedId && echoedId !== playerId) {
         try { localStorage.setItem('btc-player-id', echoedId) } catch { /* ignore */ }
@@ -179,12 +181,12 @@ export default function Home() {
         lastActiveGuessPriceRef.current = data.activeGuess.priceAtGuess
       }
 
-      // Only trigger flash once per unique resolution (by resolution price)
+      // Only trigger flash once per unique resolution (deduplicated by guessedAt timestamp)
       if (
         data.lastResolution &&
-        data.lastResolution.priceAtResolution !== lastResolutionPriceRef.current
+        data.lastResolution.guessedAt !== lastResolutionGuessedAtRef.current
       ) {
-        lastResolutionPriceRef.current = data.lastResolution.priceAtResolution
+        lastResolutionGuessedAtRef.current = data.lastResolution.guessedAt
         const isCorrect = data.lastResolution.outcome === 'correct'
         setStreak(prev => {
           const next = isCorrect ? prev + 1 : 0
@@ -209,6 +211,7 @@ export default function Home() {
       setState(data)
       setError(null)
     } catch (err) {
+      if (!mountedRef.current) return
       setError(
         err instanceof Error ? err.message : 'Connection error — retrying…'
       )
@@ -216,6 +219,7 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
+    mountedRef.current = true
     playerIdRef.current = getOrCreatePlayerId()
     if (!playerIdRef.current) {
       setError('Storage unavailable — your score won\'t persist.')
@@ -231,6 +235,7 @@ export default function Home() {
     schedule()
 
     return () => {
+      mountedRef.current = false
       if (pollRef.current) clearTimeout(pollRef.current)
     }
   }, [fetchState])

@@ -124,9 +124,7 @@ describe('GET /api/state', () => {
     const body = await res.json()
 
     expect(res.status).toBe(500)
-    expect(body.error).toBe(
-      `DynamoDB table "${process.env.TABLE_NAME ?? 'btc-game'}" was not found in region "${process.env.AWS_REGION ?? 'us-east-1'}".`
-    )
+    expect(body.error).toBe('Service unavailable — please try again later.')
     consoleSpy.mockRestore()
   })
 })
@@ -204,9 +202,7 @@ describe('POST /api/guess', () => {
     const body = await res.json()
 
     expect(res.status).toBe(500)
-    expect(body.error).toBe(
-      `DynamoDB table "${process.env.TABLE_NAME ?? 'btc-game'}" was not found in region "${process.env.AWS_REGION ?? 'us-east-1'}".`
-    )
+    expect(body.error).toBe('Service unavailable — please try again later.')
     consoleSpy.mockRestore()
   })
 })

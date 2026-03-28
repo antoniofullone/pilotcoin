@@ -35,7 +35,6 @@ export async function GET(request: NextRequest) {
   if (player.activeGuess && priceFetch) {
     const resolution = resolveGuess(
       player.activeGuess,
-      priceFetch.price,
       priceFetch.price
     )
 

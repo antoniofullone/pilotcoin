@@ -73,9 +73,7 @@ More fundamentally: the spec never asks for guess history. Two tables were solvi
 ## What I'd build differently with more time
 
 1. **httpOnly cookie for session identity** — Server-issued UUID in a cookie rather than client-generated UUID in localStorage. Closes the spoofing vector and avoids localStorage hydration sequencing issues on SSR.
-
 2. **SSE or WebSocket for price updates** — 5-second polling is a 5-second latency floor. Server-Sent Events would push price updates as they arrive, reducing perceived latency and server request volume.
-
 3. **Guess history as separate items** — Add a `guessHistory` list attribute or migrate to a dedicated guesses table for auditability. Would let players see their past decisions.
-
 4. **Rate limiting by IP** — The current design has no abuse prevention. A `proxy.ts` with IP-based rate limiting on `POST /api/guess` would prevent cost attacks on DynamoDB writes.
+

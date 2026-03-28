@@ -10,7 +10,7 @@ export function getAwsInfraErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     switch (error.name) {
       case 'ResourceNotFoundException':
-        return `DynamoDB table "${getConfiguredTableName()}" was not found in region "${getConfiguredRegion()}".`
+        return 'Service unavailable — please try again later.'
       case 'UnrecognizedClientException':
       case 'InvalidSignatureException':
         return 'AWS credentials were rejected. Check your AWS credentials and region.'
