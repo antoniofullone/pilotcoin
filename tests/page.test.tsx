@@ -46,7 +46,7 @@ function makeFetchResponse(body: object, status = 200) {
     ok: status >= 200 && status < 300,
     status,
     json: () => Promise.resolve(body),
-    headers: { get: (_key: string) => 'test-player' },
+    headers: { get: () => null },
   }
 }
 
@@ -68,14 +68,9 @@ function stubFetch(responses: Array<{ body: object; status?: number }>) {
 // Setup
 // ─────────────────────────────────────────────────────────
 
-beforeEach(() => {
-  localStorage.setItem('btc-player-id', 'test-player')
-})
-
 afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
-  localStorage.clear()
 })
 
 // ─────────────────────────────────────────────────────────

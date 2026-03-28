@@ -70,7 +70,6 @@ More importantly: the spec never asks for guess history. Two tables were solving
 
 ## What I'd build differently with more time
 
-1. **httpOnly cookie for session identity** — Server-issued UUID in a cookie. Closes spoofing and avoids localStorage hydration issues on SSR.
-2. **SSE or WebSocket for price updates** — 5-second polling is a latency floor. Streaming would push updates as they arrive.
-3. **Guess history** — Add a `guessHistory` list or migrate to a dedicated guesses table. Let players see past decisions.
-4. **Rate limiting by IP** — `proxy.ts` with throttling on `POST /api/guess` to prevent cost attacks on DynamoDB writes.
+1. **SSE or WebSocket for price updates** — 5-second polling is a latency floor. Streaming would push updates as they arrive.
+2. **Guess history** — Add a `guessHistory` list or migrate to a dedicated guesses table. Let players see past decisions.
+3. **Rate limiting by IP** — `proxy.ts` with throttling on `POST /api/guess` to prevent cost attacks on DynamoDB writes.

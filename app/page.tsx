@@ -11,19 +11,6 @@ const POLL_INTERVAL_MS = 5000
 
 type ErrorResponse = { error?: string }
 
-function getOrCreatePlayerId(): string {
-  if (typeof window === 'undefined') return ''
-  try {
-    const stored = localStorage.getItem('btc-player-id')
-    if (stored) return stored
-    const id = crypto.randomUUID()
-    localStorage.setItem('btc-player-id', id)
-    return id
-  } catch {
-    return crypto.randomUUID()
-  }
-}
-
 export default function Home() {
   const [state, setState] = useState<GameState | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -32,7 +19,6 @@ export default function Home() {
   const [flash, setFlash] = useState<FlashState | null>(null)
   const [scoreAnimation, setScoreAnimation] = useState<'pulse-up' | 'shake' | null>(null)
   const [streak, setStreak] = useState(0)
-  const playerIdRef = useRef<string>('')
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const mountedRef = useRef(true)
   // Track last seen resolution by guessedAt timestamp to avoid re-triggering on every poll
@@ -41,13 +27,8 @@ export default function Home() {
   const lastActiveGuessPriceRef = useRef<number | null>(null)
 
   const fetchState = useCallback(async () => {
-    const playerId = playerIdRef.current
-    if (!playerId) return
-
     try {
-      const res = await fetch('/api/state', {
-        headers: { 'x-player-id': playerId },
-      })
+      const res = await fetch('/api/state')
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as ErrorResponse | null
         throw new Error(body?.error ?? `State fetch failed: ${res.status}`)
@@ -55,12 +36,6 @@ export default function Home() {
       const data = await res.json() as GameState
 
       if (!mountedRef.current) return
-
-      const echoedId = res.headers.get('x-player-id')
-      if (echoedId && echoedId !== playerId) {
-        try { localStorage.setItem('btc-player-id', echoedId) } catch { /* ignore */ }
-        playerIdRef.current = echoedId
-      }
 
       // Capture entry price while activeGuess is still present
       if (data.activeGuess) {
@@ -106,10 +81,6 @@ export default function Home() {
 
   useEffect(() => {
     mountedRef.current = true
-    playerIdRef.current = getOrCreatePlayerId()
-    if (!playerIdRef.current) {
-      setError('Storage unavailable — your score won\'t persist.')
-    }
     fetchState()
 
     const schedule = () => {
@@ -134,10 +105,7 @@ export default function Home() {
     try {
       const res = await fetch('/api/guess', {
         method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-player-id': playerIdRef.current,
-        },
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ direction }),
       })
       if (res.status === 409) {

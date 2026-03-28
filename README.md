@@ -8,7 +8,7 @@ A web app that lets players guess whether the Bitcoin (BTC/USD) price will be hi
 
 ## How to Play
 
-1. Open the app — you're assigned a player ID automatically.
+1. Open the app — a session cookie is set automatically.
 2. See the live BTC/USD price (updated every 5 seconds).
 3. Click **▲ Up** if you think the price will be higher in 60 seconds, or **▼ Down** if lower.
 4. Wait. The guess resolves when both conditions are met:
@@ -40,6 +40,8 @@ BTC Price
       Kraken fallback  → api.kraken.com/0/public/Ticker?pair=XBTUSD
       Same source enforced for guess entry and resolution (fairness)
 ```
+
+**Session identity:** Server-issued UUID in an `httpOnly`, `Secure`, `SameSite=Strict` cookie. JavaScript can't read it (closes XSS vector), the browser sends it automatically, no localStorage involved.
 
 **Resolution model:** Guesses resolve lazily on the next `/api/state` poll after eligibility is met. No background job required — the spec describes a condition, not a schedule.
 
@@ -103,13 +105,20 @@ Open [http://localhost:3000](http://localhost:3000).
 npm test
 ```
 
-30 tests across 3 suites:
+42 unit/component tests across 4 suites + 4 Playwright E2E tests:
+
+```bash
+npm test          # unit + component tests (vitest)
+npm run test:e2e  # browser tests (playwright)
+```
 
 | Suite | What it tests |
 |---|---|
 | `tests/resolution.test.ts` | Pure guess resolution logic — time gate, price gate, all four direction/price combos, boundary cases |
 | `tests/price.test.ts` | Binance/Kraken fallback logic — source selection, preferredSource hint, failure handling |
-| `tests/api.test.ts` | API route integration — state loading, graceful price degradation, guess submission, 409 on duplicate, input validation |
+| `tests/api.test.ts` | API route integration — state loading, cookie session, guess submission, 409 on duplicate, input validation |
+| `tests/page.test.tsx` | React component tests — loading state, price display, guess flow, countdown ring, flash dedup, error handling |
+| `tests/e2e/game.spec.ts` | Playwright E2E — page load, button interaction, pending state, error banner |
 
 ---
 
@@ -143,8 +152,6 @@ Run the `aws dynamodb create-table` command above (one-time setup). The app uses
 
 ## Known Limitations
 
-**Session identity:** Player ID is stored in `localStorage`. Clearing browser storage loses the session. The production fix is server-issued UUIDs in `httpOnly` cookies — this closes the spoofing vector and removes the SSR hydration edge case.
-
 **Offline resolution:** Guesses resolve on the next request after eligibility, not in a background process. If you close the browser with a pending guess, it stays pending until you return. This is a deliberate trade-off — the spec describes a condition-based resolution model, not a scheduled settlement. See [`docs/engineering-tradeoffs.md`](docs/engineering-tradeoffs.md).
 
 **5-second polling:** The UI polls every 5 seconds. WebSocket or Server-Sent Events would give real-time updates with ~90% fewer requests — the right next step for production.
@@ -155,9 +162,7 @@ Run the `aws dynamodb create-table` command above (one-time setup). The app uses
 
 ## What I'd Add With More Time
 
-1. **Server-issued session cookies** — `httpOnly`, `Secure`, `SameSite=Strict`. Closes the localStorage spoofing vector.
-2. **IP-based rate limiting** — `proxy.ts` rate limit on `POST /api/guess` to prevent cost abuse on DynamoDB writes.
-3. **Server-Sent Events for price updates** — Replace polling with a streaming response. Sub-second price updates, far fewer server calls.
-4. **React component tests** — Button disable state, countdown timer, flash notifications.
-5. **E2E tests with Playwright** — Full guess lifecycle: submit → wait → see resolution and score update.
-6. **IaC template** — SAM or CDK for reproducible one-command backend deployment.
+1. **IP-based rate limiting** — `proxy.ts` rate limit on `POST /api/guess` to prevent cost abuse on DynamoDB writes.
+2. **Server-Sent Events for price updates** — Replace polling with a streaming response. Sub-second price updates, far fewer server calls.
+3. **E2E full lifecycle test** — Playwright test covering: submit guess → wait 60s → see resolution and score update (requires real timer control or stubbed time).
+4. **IaC template** — SAM or CDK for reproducible one-command backend deployment.

@@ -9,7 +9,9 @@ import type { GameState } from '@/lib/types'
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
-  const playerId = request.headers.get('x-player-id') || uuidv4()
+  const cookiePlayerId = request.cookies.get('playerId')?.value
+  const playerId = cookiePlayerId || uuidv4()
+  const isNewPlayer = !cookiePlayerId
 
   // Fetch player first — we need priceSource from activeGuess to enforce same-source resolution
   const playerResult = await getOrCreatePlayer(playerId).then(
@@ -67,8 +69,15 @@ export async function GET(request: NextRequest) {
 
   const response = NextResponse.json({ playerId, ...state })
 
-  // Echo the playerId back so clients can persist a server-assigned one
-  response.headers.set('x-player-id', playerId)
+  if (isNewPlayer) {
+    response.cookies.set('playerId', playerId, {
+      httpOnly: true,
+      sameSite: 'strict',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 365, // 1 year
+      secure: request.nextUrl.protocol === 'https:',
+    })
+  }
 
   return response
 }

@@ -35,11 +35,15 @@ function makePlayer(overrides: Partial<Player> = {}): Player {
   }
 }
 
-function makeRequest(method: string, headers: Record<string, string> = {}, body?: unknown) {
+function makeRequest(method: string, options: { playerId?: string; body?: unknown } = {}) {
+  const headers: Record<string, string> = { 'content-type': 'application/json' }
+  if (options.playerId) {
+    headers.cookie = `playerId=${options.playerId}`
+  }
   return new NextRequest('http://localhost/api/state', {
     method,
-    headers: { 'content-type': 'application/json', ...headers },
-    body: body ? JSON.stringify(body) : undefined,
+    headers,
+    body: options.body ? JSON.stringify(options.body) : undefined,
   })
 }
 
@@ -56,7 +60,7 @@ describe('GET /api/state', () => {
     vi.mocked(db.getOrCreatePlayer).mockResolvedValue(makePlayer({ score: 5 }))
     vi.mocked(price.fetchBtcPrice).mockRejectedValue(new Error('feed down'))
 
-    const res = await stateGET(makeRequest('GET', { 'x-player-id': PLAYER_ID }))
+    const res = await stateGET(makeRequest('GET', { playerId: PLAYER_ID }))
     const body = await res.json()
 
     expect(res.status).toBe(200)
@@ -65,7 +69,7 @@ describe('GET /api/state', () => {
     expect(body.activeGuess).toBeNull()
   })
 
-  it('creates a new player when no x-player-id is provided', async () => {
+  it('creates a new player and sets httpOnly cookie when no session exists', async () => {
     vi.mocked(db.getOrCreatePlayer).mockResolvedValue(makePlayer())
     vi.mocked(price.fetchBtcPrice).mockResolvedValue({ price: 65000, source: 'binance' })
 
@@ -74,8 +78,11 @@ describe('GET /api/state', () => {
 
     expect(res.status).toBe(200)
     expect(body.score).toBe(0)
-    // A new UUID was generated and echoed back
-    expect(res.headers.get('x-player-id')).toBeTruthy()
+    // Server sets an httpOnly cookie with the new playerId
+    const setCookie = res.headers.get('set-cookie')
+    expect(setCookie).toContain('playerId=')
+    expect(setCookie).toContain('HttpOnly')
+    expect(setCookie?.toLowerCase()).toContain('samesite=strict')
   })
 
   it('resolves an eligible active guess inline', async () => {
@@ -95,7 +102,7 @@ describe('GET /api/state', () => {
     })
     vi.mocked(db.resolveAndUpdateScore).mockResolvedValue(undefined)
 
-    const res = await stateGET(makeRequest('GET', { 'x-player-id': PLAYER_ID }))
+    const res = await stateGET(makeRequest('GET', { playerId: PLAYER_ID }))
     const body = await res.json()
 
     expect(res.status).toBe(200)
@@ -116,7 +123,7 @@ describe('GET /api/state', () => {
     vi.mocked(price.fetchBtcPrice).mockResolvedValue({ price: 66000, source: 'kraken' })
     vi.mocked(resolution.resolveGuess).mockReturnValue(null)
 
-    await stateGET(makeRequest('GET', { 'x-player-id': PLAYER_ID }))
+    await stateGET(makeRequest('GET', { playerId: PLAYER_ID }))
 
     expect(price.fetchBtcPrice).toHaveBeenCalledWith('kraken')
   })
@@ -125,7 +132,7 @@ describe('GET /api/state', () => {
     vi.mocked(db.getOrCreatePlayer).mockResolvedValue(makePlayer())
     vi.mocked(price.fetchBtcPrice).mockResolvedValue({ price: 65000, source: 'binance' })
 
-    await stateGET(makeRequest('GET', { 'x-player-id': PLAYER_ID }))
+    await stateGET(makeRequest('GET', { playerId: PLAYER_ID }))
 
     expect(resolution.resolveGuess).not.toHaveBeenCalled()
   })
@@ -137,7 +144,7 @@ describe('GET /api/state', () => {
     vi.mocked(db.getOrCreatePlayer).mockRejectedValue(error)
     vi.mocked(price.fetchBtcPrice).mockResolvedValue({ price: 65000, source: 'binance' })
 
-    const res = await stateGET(makeRequest('GET', { 'x-player-id': PLAYER_ID }))
+    const res = await stateGET(makeRequest('GET', { playerId: PLAYER_ID }))
     const body = await res.json()
 
     expect(res.status).toBe(500)
@@ -157,7 +164,7 @@ describe('POST /api/guess', () => {
     vi.mocked(db.submitGuess).mockResolvedValue(undefined)
 
     const res = await guessPost(
-      makeRequest('POST', { 'x-player-id': PLAYER_ID }, { direction: 'up' })
+      makeRequest('POST', { playerId: PLAYER_ID, body: { direction: 'up' } })
     )
     const body = await res.json()
 
@@ -177,7 +184,7 @@ describe('POST /api/guess', () => {
     vi.mocked(db.getOrCreatePlayer).mockResolvedValue(makePlayer({ activeGuess }))
 
     const res = await guessPost(
-      makeRequest('POST', { 'x-player-id': PLAYER_ID }, { direction: 'down' })
+      makeRequest('POST', { playerId: PLAYER_ID, body: { direction: 'down' } })
     )
 
     expect(res.status).toBe(409)
@@ -185,16 +192,16 @@ describe('POST /api/guess', () => {
 
   it('returns 400 when direction is missing', async () => {
     const res = await guessPost(
-      makeRequest('POST', { 'x-player-id': PLAYER_ID }, { direction: 'sideways' })
+      makeRequest('POST', { playerId: PLAYER_ID, body: { direction: 'sideways' } })
     )
     expect(res.status).toBe(400)
   })
 
-  it('returns 400 when x-player-id header is missing', async () => {
+  it('returns 401 when session cookie is missing', async () => {
     const res = await guessPost(
-      makeRequest('POST', {}, { direction: 'up' })
+      makeRequest('POST', { body: { direction: 'up' } })
     )
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(401)
   })
 
   it('returns 503 when price feed is unavailable', async () => {
@@ -202,7 +209,7 @@ describe('POST /api/guess', () => {
     vi.mocked(price.fetchBtcPrice).mockRejectedValue(new Error('feed down'))
 
     const res = await guessPost(
-      makeRequest('POST', { 'x-player-id': PLAYER_ID }, { direction: 'up' })
+      makeRequest('POST', { playerId: PLAYER_ID, body: { direction: 'up' } })
     )
     expect(res.status).toBe(503)
   })
@@ -214,7 +221,7 @@ describe('POST /api/guess', () => {
     vi.mocked(db.getOrCreatePlayer).mockRejectedValue(error)
 
     const res = await guessPost(
-      makeRequest('POST', { 'x-player-id': PLAYER_ID }, { direction: 'up' })
+      makeRequest('POST', { playerId: PLAYER_ID, body: { direction: 'up' } })
     )
     const body = await res.json()
 

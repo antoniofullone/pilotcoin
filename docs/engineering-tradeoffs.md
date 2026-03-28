@@ -38,15 +38,13 @@ The condition expression prevents double-resolution: first writer wins, second g
 
 ---
 
-## 4. UUID in localStorage vs. server-issued session
+## 4. Server-issued session cookie
 
-**Chose:** Client-generated UUID in `localStorage`.
+**Chose:** Server-issued UUID in an `httpOnly`, `Secure`, `SameSite=Strict` cookie. Set on first `/api/state` call, sent automatically by the browser on every subsequent request.
 
-**Gave up:** Tamper resistance. If someone knows your UUID, they can send it as the `X-Player-Id` header and impersonate you.
+**What this gives us:** JavaScript can't read the cookie (closes XSS vector). No `X-Player-Id` header to spoof. No localStorage at all, which also eliminates the SSR hydration edge case. The client component has zero session management code.
 
-**Why I'm fine with this:** No real money, no real stakes. The UUID is v4 (random), so not guessable. The attack requires already having the UUID.
-
-**To upgrade:** Issue the UUID server-side on first visit. Return it as an `httpOnly`, `Secure`, `SameSite=Strict` cookie. JavaScript can't read it (closes XSS vector), the browser sends it automatically. Drop the header pattern entirely.
+**What it doesn't cover:** Cookie clearing still loses the session. For a game with no real money, this is fine. A production system would tie sessions to authenticated accounts.
 
 ---
 
@@ -80,4 +78,3 @@ The condition expression prevents double-resolution: first writer wins, second g
 - **Leaderboard** — Not in spec. Needs a GSI on `score` or a secondary table.
 - **Rate limiting** — Would add `proxy.ts` with IP-based throttling on `POST /api/guess`.
 - **IaC templates** — DynamoDB setup is in the README. In a team, I'd add SAM or CDK.
-- **E2E tests** — Would use Playwright. Documented as the next testing investment.

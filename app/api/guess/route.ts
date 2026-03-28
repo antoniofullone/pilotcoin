@@ -7,11 +7,11 @@ import type { Direction } from '@/lib/types'
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
-  const playerId = request.headers.get('x-player-id')
+  const playerId = request.cookies.get('playerId')?.value
   if (!playerId) {
     return NextResponse.json(
-      { error: 'Missing X-Player-Id header' },
-      { status: 400 }
+      { error: 'No session — reload the page' },
+      { status: 401 }
     )
   }
 
