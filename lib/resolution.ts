@@ -11,12 +11,8 @@ const RESOLUTION_DELAY_MS = 60_000
  *
  * Returns a ResolutionResult if both gates are met.
  *
- *   Eligibility state machine:
- *
- *   [pending] ──time gate──> [waiting] ──price gate──> [eligible]
- *                                │                          │
- *                                └── price unchanged ───────┘
- *                                    (stays pending)
+ * If the price hasn't moved, the guess stays pending until it does.
+ * The UI explains this to the user via the countdown-ring component.
  */
 export function resolveGuess(
   guess: ActiveGuess,

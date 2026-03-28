@@ -47,6 +47,14 @@ describe('resolveGuess', () => {
       expect(resolveGuess(guess, 65000, makeNow())).toBeNull()
     })
 
+    it('stays pending when price unchanged even after a long time', () => {
+      const guess = makeGuess({
+        priceAtGuess: 65000,
+        guessedAt: new Date(Date.now() - 300_000).toISOString(), // 5 min ago
+      })
+      expect(resolveGuess(guess, 65000, makeNow())).toBeNull()
+    })
+
     it('resolves when price has moved up', () => {
       const guess = makeGuess({ priceAtGuess: 65000 })
       expect(resolveGuess(guess, 65001, makeNow())).not.toBeNull()

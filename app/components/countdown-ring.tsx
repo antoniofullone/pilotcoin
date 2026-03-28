@@ -10,6 +10,7 @@ export function CountdownRing({
   onExpired: () => void
 }) {
   const [remaining, setRemaining] = useState(60)
+  const [waitingSeconds, setWaitingSeconds] = useState(0)
   const firedRef = useRef(false)
 
   useEffect(() => {
@@ -19,9 +20,12 @@ export function CountdownRing({
       const elapsed = Math.floor((Date.now() - start) / 1000)
       const rem = Math.max(0, 60 - elapsed)
       setRemaining(rem)
-      if (rem === 0 && !firedRef.current) {
-        firedRef.current = true
-        onExpired()
+      if (rem === 0) {
+        setWaitingSeconds(elapsed - 60)
+        if (!firedRef.current) {
+          firedRef.current = true
+          onExpired()
+        }
       }
     }
     update()
@@ -80,6 +84,11 @@ export function CountdownRing({
       <p className="text-xs text-[var(--text-muted)]">
         {isResolving ? 'resolving…' : 'seconds left'}
       </p>
+      {waitingSeconds >= 15 && (
+        <p className="text-xs text-[var(--text-muted)] text-center max-w-[200px]">
+          Waiting for the price to move from your entry.
+        </p>
+      )}
     </div>
   )
 }
