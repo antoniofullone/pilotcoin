@@ -50,15 +50,13 @@ Trade-off: no audit trail of past guesses. In production I'd want that for debug
 
 ---
 
-## 5. UUID in localStorage for player identity
+## 5. Server-issued UUID in an httpOnly cookie
 
-**Decision:** On first visit, generate a UUID v4, store in `localStorage`, send as `X-Player-Id` on every request.
+**Decision:** On first visit, `/api/state` generates a UUID v4 and sets it as an `httpOnly`, `SameSite=Strict` cookie. The browser sends it automatically on every subsequent request. No localStorage, no custom headers.
 
-**Why:** The spec requires no auth — just persistence across sessions. A client-generated UUID in localStorage is the simplest path. Survives browser restarts. Works offline.
+**Why:** The spec requires no auth — just persistence across sessions. A server-issued cookie is the right primitive: JavaScript can't read it (closes XSS vector), the browser handles persistence automatically, and there's nothing to spoof via a custom header. The client component has zero session management code.
 
-**Known limitations:**
-- Clearing localStorage loses the session. Documented limitation, not a bug.
-- UUID spoofing: anyone who knows your UUID can impersonate you. At this scope, acceptable. The production fix is server-issued UUIDs in `httpOnly` cookies, which closes client manipulation entirely.
+**Trade-off:** Clearing browser cookies loses the session, same as localStorage would. For a game with no real money at stake, that's acceptable. A production system would tie the cookie to an authenticated account.
 
 ---
 

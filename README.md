@@ -2,7 +2,7 @@
 
 A web app that lets players guess whether the Bitcoin (BTC/USD) price will be higher or lower after one minute. Correct guesses add a point. Incorrect guesses subtract one. Score persists across sessions.
 
-**[Try the live demo](https://pilotcoin.vercel.app)**
+**[Try the live demo](https://pilotcoin.vercel.app/)**
 
 ---
 
